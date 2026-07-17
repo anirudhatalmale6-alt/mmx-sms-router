@@ -1,0 +1,21 @@
+{
+  "name": "mmx-sms-router",
+  "version": "0.1.0",
+  "description": "MMX DirectTEXT MO/DR routing portal - receives MMX callbacks and forwards to customer endpoints by Sender ID and Keyword, with DR fan-out and multi-stage retry.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute mmx_router --local --file=./schema.sql",
+    "db:init:remote": "wrangler d1 execute mmx_router --remote --file=./schema.sql",
+    "seed": "wrangler d1 execute mmx_router --local --file=./seed.sql",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}
