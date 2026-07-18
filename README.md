@@ -73,15 +73,25 @@ MMX default (retry every 60s for 48h).
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/inbound/mo` | MMX posts MO here |
-| POST | `/inbound/dr` | MMX posts DR here |
+| POST | `/inbound/mo/<key>` | MMX posts MO here (one URL per customer) |
+| POST | `/inbound/dr/<key>` | MMX posts DR here (one URL per customer) |
 | GET  | `/dashboard` | Admin console |
 | GET/POST/PATCH/DELETE | `/admin/*` | JSON API (needs `X-Admin-Token`) |
 | GET  | `/` | Health check |
 
-The inbound parser accepts JSON, form-encoded, or query-string bodies and reads
-the common field aliases for account / sender / message / message_id, so it works
-regardless of MMX's exact naming — and the raw body is always logged.
+**Customer identification.** Real MMX callbacks (API Guide v2.5) are
+`application/x-www-form-urlencoded` and carry **no account field** — MMX knows
+the account only by which registered URL it posts to. So each customer gets a
+unique secret `<key>`, and you hand MMX that customer's two URLs (shown in the
+dashboard). The **Sender ID** used for routing is the `inbound_address` field
+(the short code / sender ID), present in both MO and DR.
+
+**Faithful forwarding.** The router forwards the payload to the customer exactly
+as MMX sent it — same `content-type`, same body — so the customer's endpoint
+sees precisely what it would receive from MMX directly. (The optional message_id
+reformat is the only case where the body is re-encoded.) The raw body is always
+logged. A legacy `/inbound/mo` + `/inbound/dr` pair (customer via an `account`
+body field) exists for testing.
 
 ## Deploy (free)
 
