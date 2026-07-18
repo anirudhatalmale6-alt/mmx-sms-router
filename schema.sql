@@ -15,9 +15,13 @@ PRAGMA foreign_keys = ON;
 -- ---------------------------------------------------------------------------
 -- Customers (an MMX account, e.g. 19871-115)
 -- ---------------------------------------------------------------------------
+-- MMX does not put the account in the callback body; it identifies the
+-- customer by which registered URL it posts to. So each customer gets a unique
+-- inbound_key and hands MMX the URLs /inbound/mo/<key> and /inbound/dr/<key>.
 CREATE TABLE IF NOT EXISTS customers (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  account_ref       TEXT NOT NULL UNIQUE,          -- MMX account reference
+  account_ref       TEXT NOT NULL UNIQUE,          -- MMX account reference (label)
+  inbound_key       TEXT NOT NULL UNIQUE,          -- secret path segment for callbacks
   name              TEXT NOT NULL,
   -- message_id format applied when forwarding (spec 9.4):
   --   'uuid'  = 128-bit UUID (default), 'num12' = numeric up to 12 digits,
@@ -109,7 +113,8 @@ CREATE TABLE IF NOT EXISTS deliveries (
   route_id          INTEGER,
   dest_url          TEXT NOT NULL,
   message_id        TEXT,
-  payload           TEXT NOT NULL,                 -- JSON body we forward
+  payload           TEXT NOT NULL,                 -- exact body string we forward
+  content_type      TEXT NOT NULL DEFAULT 'application/x-www-form-urlencoded',
   status            TEXT NOT NULL DEFAULT 'pending', -- pending|success|failed
   attempts          INTEGER NOT NULL DEFAULT 0,
   stage_index       INTEGER NOT NULL DEFAULT 0,    -- current retry stage

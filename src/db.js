@@ -6,6 +6,13 @@ export async function getCustomerByAccount(db, accountRef) {
     .bind(accountRef).first();
 }
 
+// Primary lookup for live MMX traffic: the customer is identified by the secret
+// path segment MMX posts to, since the callback body carries no account field.
+export async function getCustomerByKey(db, key) {
+  return db.prepare('SELECT * FROM customers WHERE inbound_key = ? AND enabled = 1')
+    .bind(key).first();
+}
+
 export async function getCustomerById(db, id) {
   return db.prepare('SELECT * FROM customers WHERE id = ?').bind(id).first();
 }
@@ -66,12 +73,13 @@ export async function updateInboundMatched(db, inboundId, matchedCount) {
 export async function createDelivery(db, d) {
   const res = await db.prepare(
     `INSERT INTO deliveries
-      (inbound_id, direction, customer_id, route_id, dest_url, message_id, payload,
+      (inbound_id, direction, customer_id, route_id, dest_url, message_id, payload, content_type,
        status, attempts, stage_index, stage_attempts, retry_policy_id,
        next_attempt_at, first_attempt_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 0, ?, NULL, NULL, datetime('now'), datetime('now'))`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 0, ?, NULL, NULL, datetime('now'), datetime('now'))`
   ).bind(d.inboundId ?? null, d.direction, d.customerId ?? null, d.routeId ?? null,
-         d.destUrl, d.messageId ?? null, JSON.stringify(d.payload), d.retryPolicyId ?? null)
+         d.destUrl, d.messageId ?? null, d.payload, d.contentType || 'application/x-www-form-urlencoded',
+         d.retryPolicyId ?? null)
    .run();
   return res.meta.last_row_id;
 }

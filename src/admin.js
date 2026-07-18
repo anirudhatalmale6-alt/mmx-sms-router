@@ -33,10 +33,20 @@ export function mountAdmin(app) {
     const b = await c.req.json();
     if (!b.account_ref || !b.name) return c.json({ ok: false, error: 'account_ref and name required' }, 400);
     const fmt = b.message_id_format || 'passthrough';
+    // Secret path segment MMX will post callbacks to (no account is in the body).
+    const key = crypto.randomUUID().replace(/-/g, '');
     const res = await c.env.DB.prepare(
-      'INSERT INTO customers (account_ref, name, message_id_format, enabled) VALUES (?, ?, ?, ?)'
-    ).bind(b.account_ref, b.name, fmt, b.enabled === false ? 0 : 1).run();
-    return c.json({ ok: true, id: res.meta.last_row_id });
+      'INSERT INTO customers (account_ref, inbound_key, name, message_id_format, enabled) VALUES (?, ?, ?, ?, ?)'
+    ).bind(b.account_ref, key, b.name, fmt, b.enabled === false ? 0 : 1).run();
+    return c.json({ ok: true, id: res.meta.last_row_id, inbound_key: key });
+  });
+
+  // Rotate a customer's inbound key (e.g. if a URL leaks).
+  app.post('/admin/customers/:id/rotate-key', async (c) => {
+    const key = crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare('UPDATE customers SET inbound_key = ? WHERE id = ?')
+      .bind(key, c.req.param('id')).run();
+    return c.json({ ok: true, inbound_key: key });
   });
 
   app.patch('/admin/customers/:id', async (c) => {

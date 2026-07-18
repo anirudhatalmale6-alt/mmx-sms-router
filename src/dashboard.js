@@ -100,12 +100,15 @@ function renderCustomers(v){
         <option value="num12">numeric ≤12</option><option value="num19">numeric ≤19</option></select></div>
       <button onclick="addCustomer()">Add</button>
     </div></div>
-   <div class="card overflow"><h3>Customers</h3><table><thead><tr><th>ID</th><th>Account</th><th>Name</th><th>msg_id fmt</th><th>Enabled</th><th></th></tr></thead><tbody>\`
-   + S.customers.map(c=>'<tr><td>'+c.id+'</td><td><code>'+h(c.account_ref)+'</code></td><td>'+h(c.name)+'</td><td>'+h(c.message_id_format)+'</td><td>'+(c.enabled?'yes':'no')+'</td><td><button class="danger" onclick="delCustomer('+c.id+')">Delete</button></td></tr>').join('')
+   <div class="card overflow"><h3>Customers</h3>
+    <div class="hint">Give each customer's two callback URLs below to the MMX provisioning team — MMX identifies the account by the URL it posts to.</div>
+    <table><thead><tr><th>ID</th><th>Account</th><th>Name</th><th>msg_id fmt</th><th>MMX callback URLs</th><th></th></tr></thead><tbody>\`
+   + S.customers.map(c=>{const mo=location.origin+'/inbound/mo/'+c.inbound_key; const dr=location.origin+'/inbound/dr/'+c.inbound_key; return '<tr><td>'+c.id+'</td><td><code>'+h(c.account_ref)+'</code></td><td>'+h(c.name)+'</td><td>'+h(c.message_id_format)+'</td><td><div class="muted" style="font-size:11px">MO</div><code>'+h(mo)+'</code><div class="muted" style="font-size:11px;margin-top:4px">DR</div><code>'+h(dr)+'</code></td><td><button class="ghost" onclick="rotateKey('+c.id+')">Rotate key</button> <button class="danger" onclick="delCustomer('+c.id+')">Delete</button></td></tr>';}).join('')
    + '</tbody></table></div>';
 }
 async function addCustomer(){ await api('/customers',{method:'POST',body:JSON.stringify({account_ref:c_acc.value.trim(),name:c_name.value.trim(),message_id_format:c_fmt.value})}); render(); }
 async function delCustomer(id){ if(confirm('Delete customer and its routes?')){ await api('/customers/'+id,{method:'DELETE'}); render(); } }
+async function rotateKey(id){ if(confirm('Rotate this customer\\'s callback key? You must give MMX the new URLs.')){ await api('/customers/'+id+'/rotate-key',{method:'POST'}); render(); } }
 
 async function renderMo(v){
   const d = await api('/mo-routes'); const routes = d.routes||[];
