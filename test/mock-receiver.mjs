@@ -12,7 +12,7 @@ const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
   req.on('end', () => {
-    const rec = { path: req.url, at: new Date().toISOString(), body: safeJson(body) };
+    const rec = { path: req.url, at: new Date().toISOString(), auth: req.headers['authorization'] || null, ctype: req.headers['content-type'] || null, body: safeJson(body) };
     fs.appendFileSync(LOG, JSON.stringify(rec) + '\n');
     if ((failCounts[req.url] || 0) > 0) {
       failCounts[req.url]--;

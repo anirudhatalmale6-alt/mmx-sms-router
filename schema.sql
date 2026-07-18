@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS mo_routes (
   --   'first_word' (default SMS shortcode convention), 'contains', 'exact'
   keyword_match     TEXT NOT NULL DEFAULT 'first_word',
   dest_url          TEXT NOT NULL,
+  -- outbound auth to the customer endpoint: 'none' | 'basic' | 'bearer'
+  auth_type         TEXT NOT NULL DEFAULT 'none',
+  auth_username     TEXT,
+  auth_secret       TEXT,                          -- password (basic) or token (bearer)
   specificity       INTEGER NOT NULL DEFAULT 0,
   priority          INTEGER NOT NULL DEFAULT 0,    -- tie-breaker, higher wins
   retry_policy_id   INTEGER REFERENCES retry_policies(id) ON DELETE SET NULL,
@@ -80,6 +84,9 @@ CREATE TABLE IF NOT EXISTS dr_routes (
   customer_id       INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   match_sender_id   TEXT,                          -- NULL = all sender IDs
   dest_url          TEXT NOT NULL,
+  auth_type         TEXT NOT NULL DEFAULT 'none',  -- 'none' | 'basic' | 'bearer'
+  auth_username     TEXT,
+  auth_secret       TEXT,
   retry_policy_id   INTEGER REFERENCES retry_policies(id) ON DELETE SET NULL,
   enabled           INTEGER NOT NULL DEFAULT 1,
   created_at        TEXT NOT NULL DEFAULT (datetime('now'))
@@ -115,6 +122,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   message_id        TEXT,
   payload           TEXT NOT NULL,                 -- exact body string we forward
   content_type      TEXT NOT NULL DEFAULT 'application/x-www-form-urlencoded',
+  auth_header       TEXT,                          -- ready-to-send Authorization value
   status            TEXT NOT NULL DEFAULT 'pending', -- pending|success|failed
   attempts          INTEGER NOT NULL DEFAULT 0,
   stage_index       INTEGER NOT NULL DEFAULT 0,    -- current retry stage

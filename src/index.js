@@ -105,13 +105,18 @@ function buildForwardBody(customer, parsed, raw, contentType, originalMessageId)
 // Forwarder — one HTTP attempt. Any non-2xx / network error / timeout is a
 // failure the retry engine re-drives.
 // ---------------------------------------------------------------------------
-async function attemptForward(destUrl, body, contentType, timeoutMs = 15000) {
+async function attemptForward(destUrl, body, contentType, authHeader, timeoutMs = 15000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
+    const headers = {
+      'content-type': contentType || 'application/x-www-form-urlencoded',
+      'user-agent': 'MMX-Router/1.0',
+    };
+    if (authHeader) headers['authorization'] = authHeader;
     const res = await fetch(destUrl, {
       method: 'POST',
-      headers: { 'content-type': contentType || 'application/x-www-form-urlencoded', 'user-agent': 'MMX-Router/1.0' },
+      headers,
       body,
       signal: ctrl.signal,
     });
@@ -125,7 +130,7 @@ async function attemptForward(destUrl, body, contentType, timeoutMs = 15000) {
 
 // Run one attempt for a delivery row and record the result / schedule a retry.
 async function driveDelivery(env, row) {
-  const { ok, statusCode, error } = await attemptForward(row.dest_url, row.payload, row.content_type);
+  const { ok, statusCode, error } = await attemptForward(row.dest_url, row.payload, row.content_type, row.auth_header);
   const nowSec = Math.floor(Date.now() / 1000);
 
   if (ok) {
@@ -178,11 +183,12 @@ async function handleMo(c, customer) {
 
   const fwd = buildForwardBody(customer, parsed, raw, contentType, mo.messageId);
   const policy = await DB.resolveRetryPolicy(c.env.DB, customer.id, mo.senderId, route.retry_policy_id);
+  const authHeader = R.computeAuthHeader(route.auth_type, route.auth_username, route.auth_secret);
 
   const deliveryId = await DB.createDelivery(c.env.DB, {
     inboundId, direction: 'MO', customerId: customer.id, routeId: route.id,
     destUrl: route.dest_url, messageId: fwd.outId, payload: fwd.body, contentType: fwd.contentType,
-    retryPolicyId: policy ? policy.id : null,
+    authHeader, retryPolicyId: policy ? policy.id : null,
   });
   await DB.updateInboundMatched(c.env.DB, inboundId, 1);
 
@@ -216,10 +222,11 @@ async function handleDr(c, customer) {
   const ids = [];
   for (const route of routes) {
     const policy = await DB.resolveRetryPolicy(c.env.DB, customer.id, dr.senderId, route.retry_policy_id);
+    const authHeader = R.computeAuthHeader(route.auth_type, route.auth_username, route.auth_secret);
     const deliveryId = await DB.createDelivery(c.env.DB, {
       inboundId, direction: 'DR', customerId: customer.id, routeId: route.id,
       destUrl: route.dest_url, messageId: fwd.outId, payload: fwd.body, contentType: fwd.contentType,
-      retryPolicyId: policy ? policy.id : null,
+      authHeader, retryPolicyId: policy ? policy.id : null,
     });
     ids.push(deliveryId);
     const row = await c.env.DB.prepare('SELECT * FROM deliveries WHERE id = ?').bind(deliveryId).first();

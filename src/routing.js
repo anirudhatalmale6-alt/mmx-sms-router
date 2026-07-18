@@ -108,6 +108,30 @@ export function formatMessageId(format, originalId, uuidFn) {
   }
 }
 
+/**
+ * Build the Authorization header a forward should carry to a customer endpoint.
+ * MMX's own MO/DR delivery supports NoAuth / BasicAuth / OAuth2 (API Guide);
+ * we mirror that: 'none', 'basic' (username:secret), or 'bearer' (static token,
+ * which also covers OAuth2 endpoints that accept a pre-issued access token).
+ * Returns the header string or null.
+ */
+export function computeAuthHeader(type, username, secret) {
+  switch ((type || 'none').toLowerCase()) {
+    case 'basic': {
+      if (!username && !secret) return null;
+      const b64 = typeof btoa === 'function'
+        ? btoa(`${username || ''}:${secret || ''}`)
+        : Buffer.from(`${username || ''}:${secret || ''}`).toString('base64');
+      return `Basic ${b64}`;
+    }
+    case 'bearer':
+      return secret ? `Bearer ${secret}` : null;
+    case 'none':
+    default:
+      return null;
+  }
+}
+
 // Deterministic numeric string of exactly `len` digits derived from a seed.
 function numericFromSeed(seed, len) {
   const s = String(seed ?? '');

@@ -73,13 +73,13 @@ export async function updateInboundMatched(db, inboundId, matchedCount) {
 export async function createDelivery(db, d) {
   const res = await db.prepare(
     `INSERT INTO deliveries
-      (inbound_id, direction, customer_id, route_id, dest_url, message_id, payload, content_type,
+      (inbound_id, direction, customer_id, route_id, dest_url, message_id, payload, content_type, auth_header,
        status, attempts, stage_index, stage_attempts, retry_policy_id,
        next_attempt_at, first_attempt_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 0, ?, NULL, NULL, datetime('now'), datetime('now'))`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, 0, ?, NULL, NULL, datetime('now'), datetime('now'))`
   ).bind(d.inboundId ?? null, d.direction, d.customerId ?? null, d.routeId ?? null,
          d.destUrl, d.messageId ?? null, d.payload, d.contentType || 'application/x-www-form-urlencoded',
-         d.retryPolicyId ?? null)
+         d.authHeader ?? null, d.retryPolicyId ?? null)
    .run();
   return res.meta.last_row_id;
 }

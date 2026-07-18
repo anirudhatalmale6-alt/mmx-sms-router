@@ -86,11 +86,12 @@ export function mountAdmin(app) {
     const spec = specificity(b.match_sender_id, b.match_keyword);
     const res = await c.env.DB.prepare(
       `INSERT INTO mo_routes (customer_id, match_sender_id, match_keyword, keyword_match, dest_url,
-        specificity, priority, retry_policy_id, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        auth_type, auth_username, auth_secret, specificity, priority, retry_policy_id, enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(b.customer_id, b.match_sender_id || null, b.match_keyword || null,
-           b.keyword_match || 'first_word', b.dest_url, spec, b.priority || 0,
-           b.retry_policy_id || null, b.enabled === false ? 0 : 1).run();
+           b.keyword_match || 'first_word', b.dest_url,
+           b.auth_type || 'none', b.auth_username || null, b.auth_secret || null,
+           spec, b.priority || 0, b.retry_policy_id || null, b.enabled === false ? 0 : 1).run();
     return c.json({ ok: true, id: res.meta.last_row_id });
   });
 
@@ -98,7 +99,7 @@ export function mountAdmin(app) {
     const id = c.req.param('id');
     const b = await c.req.json();
     const fields = [], vals = [];
-    for (const k of ['match_sender_id', 'match_keyword', 'keyword_match', 'dest_url', 'priority', 'retry_policy_id', 'enabled']) {
+    for (const k of ['match_sender_id', 'match_keyword', 'keyword_match', 'dest_url', 'auth_type', 'auth_username', 'auth_secret', 'priority', 'retry_policy_id', 'enabled']) {
       if (b[k] !== undefined) { fields.push(`${k} = ?`); vals.push(k === 'enabled' ? (b[k] ? 1 : 0) : (b[k] || null)); }
     }
     if (b.match_sender_id !== undefined || b.match_keyword !== undefined) {
@@ -132,10 +133,11 @@ export function mountAdmin(app) {
     const b = await c.req.json();
     if (!b.customer_id || !b.dest_url) return c.json({ ok: false, error: 'customer_id and dest_url required' }, 400);
     const res = await c.env.DB.prepare(
-      `INSERT INTO dr_routes (customer_id, match_sender_id, dest_url, retry_policy_id, enabled)
-       VALUES (?, ?, ?, ?, ?)`
-    ).bind(b.customer_id, b.match_sender_id || null, b.dest_url, b.retry_policy_id || null,
-           b.enabled === false ? 0 : 1).run();
+      `INSERT INTO dr_routes (customer_id, match_sender_id, dest_url, auth_type, auth_username, auth_secret, retry_policy_id, enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(b.customer_id, b.match_sender_id || null, b.dest_url,
+           b.auth_type || 'none', b.auth_username || null, b.auth_secret || null,
+           b.retry_policy_id || null, b.enabled === false ? 0 : 1).run();
     return c.json({ ok: true, id: res.meta.last_row_id });
   });
 

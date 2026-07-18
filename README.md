@@ -29,6 +29,7 @@ Built to run **free** on Cloudflare Workers + D1 (always-on, no cold-start
 | 9.5 | Retry on non-2xx, fixed interval | ✅ |
 | 9.5 | Multi-stage retry policies (per-stage delay/duration) | ✅ |
 | 9.5 | Different retry policies per Sender ID | ✅ |
+| — | Outbound auth to customer endpoints (None / Basic / Bearer) | ✅ |
 | — | Admin dashboard (customers, routes, policies, live logs) | ✅ |
 
 > **9.1 Prioritization of MT requests** is a setting arranged directly with
@@ -93,7 +94,24 @@ reformat is the only case where the body is re-encoded.) The raw body is always
 logged. A legacy `/inbound/mo` + `/inbound/dr` pair (customer via an `account`
 body field) exists for testing.
 
+## Outbound auth to customer endpoints
+
+MMX itself supports NoAuth / BasicAuth / OAuth2 when delivering MO/DR to a
+customer URL. Each route mirrors that: set `auth_type` to `none`, `basic`
+(username + password) or `bearer` (static token — also covers OAuth2 endpoints
+that accept a pre-issued access token). The router attaches the right
+`Authorization` header on every attempt, including retries.
+
 ## Deploy (free)
+
+**One command** (headless, no browser login — good for a server), using a
+Cloudflare API token:
+
+```bash
+CLOUDFLARE_API_TOKEN=xxx CLOUDFLARE_ACCOUNT_ID=yyy ADMIN_TOKEN=strongtoken ./scripts/deploy.sh
+```
+
+Or **manually**:
 
 ```bash
 npm install

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   firstWord, keywordMatches, senderMatches, specificityOf,
-  selectMoRoute, selectDrRoutes, formatMessageId,
+  selectMoRoute, selectDrRoutes, formatMessageId, computeAuthHeader,
 } from '../src/routing.js';
 
 const rule = (o) => ({ enabled: 1, keyword_match: 'first_word', priority: 0, id: 1, ...o });
@@ -94,6 +94,13 @@ test('selectDrRoutes: fan-out to all matching URLs (spec 9.3)', () => {
   assert.deepEqual(selectDrRoutes(rules, { senderId: '99999' }).map(r => r.dest_url), ['A', 'B']);
   // sender 12345 -> unscoped A,B plus scoped C
   assert.deepEqual(selectDrRoutes(rules, { senderId: '12345' }).map(r => r.dest_url), ['A', 'B', 'C']);
+});
+
+test('computeAuthHeader builds Basic / Bearer / none', () => {
+  assert.equal(computeAuthHeader('none'), null);
+  assert.equal(computeAuthHeader('basic', 'alice', 'secret'), 'Basic ' + Buffer.from('alice:secret').toString('base64'));
+  assert.equal(computeAuthHeader('bearer', null, 'tok123'), 'Bearer tok123');
+  assert.equal(computeAuthHeader('bearer', null, ''), null); // no token -> no header
 });
 
 test('formatMessageId honours per-customer format (spec 9.4)', () => {

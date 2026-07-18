@@ -120,14 +120,20 @@ async function renderMo(v){
       <div><label>Keyword</label><input id="m_kw" placeholder="word1 (optional)"/></div>
       <div><label>Keyword match</label><select id="m_km"><option value="first_word">first word</option><option value="contains">contains</option><option value="exact">exact</option></select></div>
       <div style="flex:1"><label>Destination URL</label><input id="m_url" style="width:100%" placeholder="https://customer.example/mo"/></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>Auth to endpoint</label><select id="m_auth" onchange="toggleAuth('m')"><option value="none">none</option><option value="basic">basic</option><option value="bearer">bearer</option></select></div>
+      <div id="m_auth_user_w" style="display:none"><label>Username</label><input id="m_auth_user"/></div>
+      <div id="m_auth_secret_w" style="display:none"><label>Password / token</label><input id="m_auth_secret" type="password"/></div>
       <button onclick="addMo()">Add</button>
     </div>
-    <div class="hint">Most specific rule wins: Sender ID + Keyword &gt; Keyword &gt; Sender ID &gt; catch-all. Leave both blank for a catch-all.</div></div>
-   <div class="card overflow"><h3>MO routes</h3><table><thead><tr><th>ID</th><th>Customer</th><th>Sender ID</th><th>Keyword</th><th>Match</th><th>Dest URL</th><th>Spec</th><th></th></tr></thead><tbody>\`
-   + routes.map(r=>{const c=S.customers.find(x=>x.id==r.customer_id);return '<tr><td>'+r.id+'</td><td>'+h(c?c.name:r.customer_id)+'</td><td>'+h(r.match_sender_id||'—')+'</td><td>'+h(r.match_keyword||'—')+'</td><td>'+h(r.keyword_match)+'</td><td><code>'+h(r.dest_url)+'</code></td><td>'+r.specificity+'</td><td><button class="danger" onclick="delMo('+r.id+')">Del</button></td></tr>';}).join('')
+    <div class="hint">Most specific rule wins: Sender ID + Keyword &gt; Keyword &gt; Sender ID &gt; catch-all. Leave both blank for a catch-all. Set auth if the customer endpoint requires BasicAuth or a bearer token.</div></div>
+   <div class="card overflow"><h3>MO routes</h3><table><thead><tr><th>ID</th><th>Customer</th><th>Sender ID</th><th>Keyword</th><th>Match</th><th>Dest URL</th><th>Auth</th><th>Spec</th><th></th></tr></thead><tbody>\`
+   + routes.map(r=>{const c=S.customers.find(x=>x.id==r.customer_id);return '<tr><td>'+r.id+'</td><td>'+h(c?c.name:r.customer_id)+'</td><td>'+h(r.match_sender_id||'—')+'</td><td>'+h(r.match_keyword||'—')+'</td><td>'+h(r.keyword_match)+'</td><td><code>'+h(r.dest_url)+'</code></td><td>'+h(r.auth_type||'none')+'</td><td>'+r.specificity+'</td><td><button class="danger" onclick="delMo('+r.id+')">Del</button></td></tr>';}).join('')
    + '</tbody></table></div>';
 }
-async function addMo(){ await api('/mo-routes',{method:'POST',body:JSON.stringify({customer_id:+m_cust.value,match_sender_id:m_sender.value.trim(),match_keyword:m_kw.value.trim(),keyword_match:m_km.value,dest_url:m_url.value.trim(),allow_default:(!m_sender.value.trim()&&!m_kw.value.trim())})}); render(); }
+function toggleAuth(p){ const t=document.getElementById(p+'_auth').value; document.getElementById(p+'_auth_user_w').style.display=(t==='basic')?'block':'none'; document.getElementById(p+'_auth_secret_w').style.display=(t==='none')?'none':'block'; }
+async function addMo(){ await api('/mo-routes',{method:'POST',body:JSON.stringify({customer_id:+m_cust.value,match_sender_id:m_sender.value.trim(),match_keyword:m_kw.value.trim(),keyword_match:m_km.value,dest_url:m_url.value.trim(),auth_type:m_auth.value,auth_username:(document.getElementById('m_auth_user')||{}).value,auth_secret:(document.getElementById('m_auth_secret')||{}).value,allow_default:(!m_sender.value.trim()&&!m_kw.value.trim())})}); render(); }
 async function delMo(id){ await api('/mo-routes/'+id,{method:'DELETE'}); render(); }
 
 async function renderDr(v){
@@ -138,14 +144,19 @@ async function renderDr(v){
       <div><label>Customer</label><select id="d_cust">\`+custOptions()+\`</select></div>
       <div><label>Sender ID</label><input id="d_sender" placeholder="12345 (optional = all)"/></div>
       <div style="flex:1"><label>Destination URL</label><input id="d_url" style="width:100%" placeholder="https://customer.example/dr"/></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>Auth to endpoint</label><select id="d_auth" onchange="toggleAuth('d')"><option value="none">none</option><option value="basic">basic</option><option value="bearer">bearer</option></select></div>
+      <div id="d_auth_user_w" style="display:none"><label>Username</label><input id="d_auth_user"/></div>
+      <div id="d_auth_secret_w" style="display:none"><label>Password / token</label><input id="d_auth_secret" type="password"/></div>
       <button onclick="addDr()">Add</button>
     </div>
-    <div class="hint">Add several rows for the same customer to fan one receipt out to multiple URLs. Set a Sender ID to scope a URL to that sender.</div></div>
-   <div class="card overflow"><h3>DR routes</h3><table><thead><tr><th>ID</th><th>Customer</th><th>Sender ID</th><th>Dest URL</th><th></th></tr></thead><tbody>\`
-   + routes.map(r=>{const c=S.customers.find(x=>x.id==r.customer_id);return '<tr><td>'+r.id+'</td><td>'+h(c?c.name:r.customer_id)+'</td><td>'+h(r.match_sender_id||'all')+'</td><td><code>'+h(r.dest_url)+'</code></td><td><button class="danger" onclick="delDr('+r.id+')">Del</button></td></tr>';}).join('')
+    <div class="hint">Add several rows for the same customer to fan one receipt out to multiple URLs. Set a Sender ID to scope a URL to that sender. Set auth if the endpoint requires it.</div></div>
+   <div class="card overflow"><h3>DR routes</h3><table><thead><tr><th>ID</th><th>Customer</th><th>Sender ID</th><th>Dest URL</th><th>Auth</th><th></th></tr></thead><tbody>\`
+   + routes.map(r=>{const c=S.customers.find(x=>x.id==r.customer_id);return '<tr><td>'+r.id+'</td><td>'+h(c?c.name:r.customer_id)+'</td><td>'+h(r.match_sender_id||'all')+'</td><td><code>'+h(r.dest_url)+'</code></td><td>'+h(r.auth_type||'none')+'</td><td><button class="danger" onclick="delDr('+r.id+')">Del</button></td></tr>';}).join('')
    + '</tbody></table></div>';
 }
-async function addDr(){ await api('/dr-routes',{method:'POST',body:JSON.stringify({customer_id:+d_cust.value,match_sender_id:d_sender.value.trim(),dest_url:d_url.value.trim()})}); render(); }
+async function addDr(){ await api('/dr-routes',{method:'POST',body:JSON.stringify({customer_id:+d_cust.value,match_sender_id:d_sender.value.trim(),dest_url:d_url.value.trim(),auth_type:d_auth.value,auth_username:(document.getElementById('d_auth_user')||{}).value,auth_secret:(document.getElementById('d_auth_secret')||{}).value})}); render(); }
 async function delDr(id){ await api('/dr-routes/'+id,{method:'DELETE'}); render(); }
 
 async function renderRetry(v){
