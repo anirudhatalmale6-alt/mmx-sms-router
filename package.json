@@ -10,7 +10,7 @@
     "db:init": "wrangler d1 execute mmx_router --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute mmx_router --remote --file=./schema.sql",
     "seed": "wrangler d1 execute mmx_router --local --file=./seed.sql",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "hono": "^4.6.14"

@@ -10,7 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "mmx_router"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "1c131578-c85b-49d4-817e-83f302dfd6ff"
 
 # Scheduled trigger drives the retry engine. Every minute it scans the
 # delivery log for due retries and re-attempts them per the customer's
@@ -18,7 +18,6 @@ database_id = "REPLACE_WITH_DATABASE_ID"
 [triggers]
 crons = ["* * * * *"]
 
-[vars]
-# Shared secret required in the X-Admin-Token header for all /admin API
-# calls. Override in production with:  wrangler secret put ADMIN_TOKEN
-ADMIN_TOKEN = "dev-admin-token-change-me"
+# ADMIN_TOKEN is provided as an encrypted secret (wrangler secret put ADMIN_TOKEN),
+# not a plaintext var, so the admin dashboard/API token never lives in the repo.
+# For local dev, wrangler reads it from a .dev.vars file (gitignored).

@@ -21,17 +21,35 @@ ADMIN_TOKEN="${ADMIN_TOKEN:-$(openssl rand -hex 24)}"
 echo "==> Installing dependencies"
 npm install --no-audit --no-fund
 
+API="https://api.cloudflare.com/client/v4"
+auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+# Make sure the account has a workers.dev subdomain, or the deploy has no public
+# URL to publish to. Register one derived from the account id if missing.
+echo "==> Ensuring a workers.dev subdomain exists"
+SUB=$(curl -s "${auth[@]}" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).result?.subdomain||"")}catch{console.log("")}})')
+if [ -z "$SUB" ]; then
+  SUB="mmx-$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | cut -c1-12)"
+  echo "==> Registering workers.dev subdomain '$SUB'"
+  curl -s -X PUT "${auth[@]}" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+    --data "{\"subdomain\":\"$SUB\"}" >/dev/null
+fi
+echo "    subdomain: $SUB"
+
 # Create the D1 database if it does not exist yet, capturing its id.
 echo "==> Ensuring D1 database 'mmx_router' exists"
 if ! npx wrangler d1 info mmx_router >/dev/null 2>&1; then
-  CREATE_OUT=$(npx wrangler d1 create mmx_router)
-  echo "$CREATE_OUT"
+  npx wrangler d1 create mmx_router || true
 fi
-# Resolve the database_id from wrangler and write it into wrangler.toml.
-DB_ID=$(npx wrangler d1 info mmx_router --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).uuid||JSON.parse(s).database_id||"")}catch{console.log("")}})')
+# Resolve the database_id straight from the API (robust across wrangler versions).
+DB_ID=$(curl -s "${auth[@]}" "$API/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=(JSON.parse(s).result||[]).find(x=>x.name==="mmx_router");console.log(r?r.uuid:"")}catch{console.log("")}})')
 if [ -n "$DB_ID" ]; then
   echo "==> Writing database_id $DB_ID into wrangler.toml"
   sed -i.bak "s/database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml && rm -f wrangler.toml.bak
+else
+  echo "!! Could not resolve database_id automatically; set it in wrangler.toml manually." >&2
 fi
 
 echo "==> Applying schema to the remote database"
@@ -46,6 +64,6 @@ npx wrangler deploy
 echo
 echo "==================================================================="
 echo " Deployed. Admin token: $ADMIN_TOKEN"
-echo " Dashboard:  https://mmx-sms-router.<your-subdomain>.workers.dev/dashboard"
+echo " Dashboard:  https://mmx-sms-router.$SUB.workers.dev/dashboard"
 echo " Give MMX each customer's callback URLs from the dashboard."
 echo "==================================================================="
