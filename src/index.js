@@ -245,6 +245,22 @@ app.post('/inbound/dr/:key', async (c) => handleDr(c, await DB.getCustomerByKey(
 app.post('/inbound/mo', async (c) => handleMo(c, null));
 app.post('/inbound/dr', async (c) => handleDr(c, null));
 
+// GET on the callback URLs is a health check only — MMX delivers via POST.
+// Opening the URL in a browser (a GET) confirms the endpoint is live and the
+// key is valid, instead of showing a bare 404 that looks broken.
+async function inboundHealth(c, kind) {
+  const customer = await DB.getCustomerByKey(c.env.DB, c.req.param('key'));
+  if (!customer) {
+    return c.json({ service: 'mmx-sms-router', endpoint: kind, status: 'unknown_key',
+      message: 'This callback URL is live but the key is not recognised. Check the URL against the dashboard.' }, 404);
+  }
+  return c.json({ service: 'mmx-sms-router', endpoint: kind, status: 'ready',
+    customer: customer.name,
+    message: `This ${kind.toUpperCase()} callback endpoint is live and ready. MMX should deliver ${kind.toUpperCase()} callbacks here via HTTP POST.` });
+}
+app.get('/inbound/mo/:key', (c) => inboundHealth(c, 'mo'));
+app.get('/inbound/dr/:key', (c) => inboundHealth(c, 'dr'));
+
 // Health check.
 app.get('/', (c) => c.json({ service: 'mmx-sms-router', status: 'ok' }));
 
