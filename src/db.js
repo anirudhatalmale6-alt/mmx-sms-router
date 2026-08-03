@@ -124,3 +124,55 @@ export async function markDeliveryFailed(db, id, { statusCode, error }) {
       WHERE id=?`
   ).bind(statusCode ?? null, error ?? null, id).run();
 }
+
+// ---------------------------------------------------------------------------
+// Auto-responder (HELP/STOP/START) — rules, opt-out list, outbound send log.
+// ---------------------------------------------------------------------------
+
+export async function getAutoResponses(db, customerId) {
+  const { results } = await db
+    .prepare('SELECT * FROM auto_responses WHERE customer_id = ? AND enabled = 1')
+    .bind(customerId).all();
+  return results || [];
+}
+
+// Add a number to the opt-out list (idempotent via the unique index).
+export async function addOptOut(db, customerId, deviceAddress, senderId, keyword) {
+  await db.prepare(
+    `INSERT OR IGNORE INTO opt_outs (customer_id, device_address, sender_id, keyword)
+     VALUES (?, ?, ?, ?)`
+  ).bind(customerId, deviceAddress, senderId ?? null, keyword ?? null).run();
+}
+
+// Remove a number from the opt-out list (opt back in). Clears both the
+// sender-scoped row and any all-senders row for that number.
+export async function removeOptOut(db, customerId, deviceAddress, senderId) {
+  await db.prepare(
+    `DELETE FROM opt_outs
+      WHERE customer_id = ? AND device_address = ?
+        AND (sender_id = ? OR sender_id IS NULL OR ? IS NULL)`
+  ).bind(customerId, deviceAddress, senderId ?? null, senderId ?? null).run();
+}
+
+// Is this number opted out for the given sender (or across all senders)?
+export async function isOptedOut(db, customerId, deviceAddress, senderId) {
+  const row = await db.prepare(
+    `SELECT 1 FROM opt_outs
+      WHERE customer_id = ? AND device_address = ?
+        AND (sender_id IS NULL OR sender_id = ?) LIMIT 1`
+  ).bind(customerId, deviceAddress, senderId ?? null).first();
+  return !!row;
+}
+
+export async function logOutbound(db, o) {
+  const res = await db.prepare(
+    `INSERT INTO outbound_messages
+      (customer_id, inbound_id, keyword, action, reply_to, recipient, body,
+       status, http_status, mmx_code, mmx_message_id, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(o.customerId ?? null, o.inboundId ?? null, o.keyword ?? null, o.action ?? null,
+         o.replyTo ?? null, o.recipient ?? null, o.body ?? null,
+         o.status ?? 'pending', o.httpStatus ?? null, o.mmxCode ?? null,
+         o.mmxMessageId ?? null, o.error ?? null).run();
+  return res.meta.last_row_id;
+}

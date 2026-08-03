@@ -58,6 +58,7 @@ export function dashboardHtml() {
   <a data-tab="customers" class="active">Customers</a>
   <a data-tab="mo">MO Routes</a>
   <a data-tab="dr">DR Routes</a>
+  <a data-tab="auto">Auto-Reply</a>
   <a data-tab="retry">Retry Policies</a>
   <a data-tab="logs">Delivery Log</a>
 </nav>
@@ -85,6 +86,7 @@ async function render(){
   if(S.tab==='customers') return renderCustomers(v);
   if(S.tab==='mo') return renderMo(v);
   if(S.tab==='dr') return renderDr(v);
+  if(S.tab==='auto') return renderAuto(v);
   if(S.tab==='retry') return renderRetry(v);
   if(S.tab==='logs') return renderLogs(v);
 }
@@ -158,6 +160,38 @@ async function renderDr(v){
 }
 async function addDr(){ await api('/dr-routes',{method:'POST',body:JSON.stringify({customer_id:+d_cust.value,match_sender_id:d_sender.value.trim(),dest_url:d_url.value.trim(),auth_type:d_auth.value,auth_username:(document.getElementById('d_auth_user')||{}).value,auth_secret:(document.getElementById('d_auth_secret')||{}).value})}); render(); }
 async function delDr(id){ await api('/dr-routes/'+id,{method:'DELETE'}); render(); }
+
+async function renderAuto(v){
+  const [ar, oo, ob] = await Promise.all([api('/auto-responses'), api('/opt-outs'), api('/outbound')]);
+  const rules = ar.rules||[]; const optouts = oo.opt_outs||[]; const outbound = ob.outbound||[];
+  v.innerHTML = \`
+   <div class="card"><h3>HELP / STOP / START auto-replies</h3>
+    <div class="hint">When someone texts one of these keywords, the portal sends the reply back automatically (carrier certification requirement) and updates the opt-out list. STOP-type = opt the number out + reply; START-type = opt back in + reply; HELP = reply only. Sending uses your MMX send API credentials (set server-side).</div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Customer</label><select id="a_cust">\`+custOptions()+\`</select></div>
+      <button class="ghost" onclick="seedAuto()">Seed standard STOP/HELP/START</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div><label>Keyword</label><input id="a_kw" placeholder="STOP" size="10"/></div>
+      <div><label>Match</label><select id="a_km"><option value="first_word">first word</option><option value="exact">exact</option><option value="contains">contains</option></select></div>
+      <div><label>Action</label><select id="a_action"><option value="reply">reply only</option><option value="optout">opt-out + reply</option><option value="optin">opt-in + reply</option></select></div>
+      <div style="flex:1"><label>Reply text</label><input id="a_body" style="width:100%" placeholder="You are unsubscribed. Reply START to opt back in."/></div>
+      <button onclick="addAuto()">Add</button>
+    </div></div>
+   <div class="card overflow"><h3>Auto-reply rules</h3><table><thead><tr><th>ID</th><th>Customer</th><th>Keyword</th><th>Match</th><th>Action</th><th>Reply text</th><th></th></tr></thead><tbody>\`
+   + rules.map(r=>{const c=S.customers.find(x=>x.id==r.customer_id);return '<tr><td>'+r.id+'</td><td>'+h(c?c.name:r.customer_id)+'</td><td><code>'+h(r.match_keyword)+'</code></td><td>'+h(r.keyword_match)+'</td><td>'+h(r.action)+'</td><td class="muted">'+h(r.reply_body||'—')+'</td><td><button class="danger" onclick="delAuto('+r.id+')">Del</button></td></tr>';}).join('')
+   + \`</tbody></table></div>
+   <div class="card overflow"><h3>Opt-out list (\${optouts.length})</h3><div class="hint">Numbers that texted STOP. Kept so your sends can suppress them.</div><table><thead><tr><th>ID</th><th>Customer</th><th>Number</th><th>Sender</th><th>Keyword</th><th>When</th><th></th></tr></thead><tbody>\`
+   + optouts.map(o=>{const c=S.customers.find(x=>x.id==o.customer_id);return '<tr><td>'+o.id+'</td><td>'+h(c?c.name:o.customer_id)+'</td><td><code>'+h(o.device_address)+'</code></td><td>'+h(o.sender_id||'all')+'</td><td>'+h(o.keyword||'—')+'</td><td class="muted">'+h(o.created_at)+'</td><td><button class="danger" onclick="delOptout('+o.id+')">Remove</button></td></tr>';}).join('')
+   + \`</tbody></table></div>
+   <div class="card overflow"><h3>Outbound replies sent (latest 200)</h3><table><thead><tr><th>ID</th><th>Keyword</th><th>To</th><th>Over</th><th>Status</th><th>HTTP</th><th>MMX code</th><th>Reply</th><th>When</th></tr></thead><tbody>\`
+   + outbound.map(o=>'<tr><td>'+o.id+'</td><td>'+h(o.keyword||'—')+'</td><td><code>'+h(o.recipient||'—')+'</code></td><td>'+h(o.reply_to||'—')+'</td><td><span class="pill '+(o.status==='sent'?'success':(o.status==='failed'?'failed':'pending'))+'">'+h(o.status)+'</span></td><td>'+h(o.http_status||'—')+'</td><td>'+h(o.mmx_code||'—')+'</td><td class="muted">'+h((o.body||'').slice(0,40))+'</td><td class="muted">'+h(o.created_at)+'</td></tr>').join('')
+   + '</tbody></table></div>';
+}
+async function seedAuto(){ const d=await api('/auto-responses/seed',{method:'POST',body:JSON.stringify({customer_id:+a_cust.value})}); alert('Seeded '+d.created+' standard rule(s).'); render(); }
+async function addAuto(){ if(!a_kw.value.trim())return alert('Keyword required'); await api('/auto-responses',{method:'POST',body:JSON.stringify({customer_id:+a_cust.value,match_keyword:a_kw.value.trim(),keyword_match:a_km.value,action:a_action.value,reply_body:a_body.value})}); render(); }
+async function delAuto(id){ await api('/auto-responses/'+id,{method:'DELETE'}); render(); }
+async function delOptout(id){ if(confirm('Remove this number from the opt-out list (opt them back in)?')){ await api('/opt-outs/'+id,{method:'DELETE'}); render(); } }
 
 async function renderRetry(v){
   const d = await api('/retry-policies'); const pols = d.policies||[];

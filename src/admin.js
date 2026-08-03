@@ -5,6 +5,8 @@
 // The specificity column on MO routes is derived server-side so the router can
 // order by it without recomputing.
 
+import * as AR from './autoresponder.js';
+
 function auth(c, next) {
   const token = c.req.header('x-admin-token') || new URL(c.req.url).searchParams.get('token');
   if (!token || token !== c.env.ADMIN_TOKEN) {
@@ -53,7 +55,7 @@ export function mountAdmin(app) {
     const id = c.req.param('id');
     const b = await c.req.json();
     const fields = [], vals = [];
-    for (const k of ['name', 'account_ref', 'message_id_format', 'enabled']) {
+    for (const k of ['name', 'account_ref', 'message_id_format', 'enabled', 'send_username', 'send_secret']) {
       if (b[k] !== undefined) { fields.push(`${k} = ?`); vals.push(k === 'enabled' ? (b[k] ? 1 : 0) : b[k]); }
     }
     if (!fields.length) return c.json({ ok: false, error: 'nothing to update' }, 400);
@@ -169,6 +171,88 @@ export function mountAdmin(app) {
   app.delete('/admin/retry-policies/:id', async (c) => {
     await c.env.DB.prepare('DELETE FROM retry_policies WHERE id = ?').bind(c.req.param('id')).run();
     return c.json({ ok: true });
+  });
+
+  // ---- Auto-responses (HELP/STOP/START) --------------------------------
+  app.get('/admin/auto-responses', async (c) => {
+    const cid = new URL(c.req.url).searchParams.get('customer_id');
+    const q = cid
+      ? c.env.DB.prepare('SELECT * FROM auto_responses WHERE customer_id = ? ORDER BY id DESC').bind(cid)
+      : c.env.DB.prepare('SELECT * FROM auto_responses ORDER BY id DESC');
+    const { results } = await q.all();
+    return c.json({ ok: true, rules: results || [] });
+  });
+
+  app.post('/admin/auto-responses', async (c) => {
+    const b = await c.req.json();
+    if (!b.customer_id || !b.match_keyword) return c.json({ ok: false, error: 'customer_id and match_keyword required' }, 400);
+    const action = ['reply', 'optout', 'optin'].includes(b.action) ? b.action : 'reply';
+    const res = await c.env.DB.prepare(
+      `INSERT INTO auto_responses (customer_id, match_keyword, keyword_match, action, reply_body, enabled)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(b.customer_id, String(b.match_keyword).trim(), b.keyword_match || 'first_word',
+           action, b.reply_body || null, b.enabled === false ? 0 : 1).run();
+    return c.json({ ok: true, id: res.meta.last_row_id });
+  });
+
+  app.patch('/admin/auto-responses/:id', async (c) => {
+    const id = c.req.param('id');
+    const b = await c.req.json();
+    const fields = [], vals = [];
+    for (const k of ['match_keyword', 'keyword_match', 'action', 'reply_body', 'enabled']) {
+      if (b[k] !== undefined) { fields.push(`${k} = ?`); vals.push(k === 'enabled' ? (b[k] ? 1 : 0) : (b[k] ?? null)); }
+    }
+    if (!fields.length) return c.json({ ok: false, error: 'nothing to update' }, 400);
+    vals.push(id);
+    await c.env.DB.prepare(`UPDATE auto_responses SET ${fields.join(', ')} WHERE id = ?`).bind(...vals).run();
+    return c.json({ ok: true });
+  });
+
+  app.delete('/admin/auto-responses/:id', async (c) => {
+    await c.env.DB.prepare('DELETE FROM auto_responses WHERE id = ?').bind(c.req.param('id')).run();
+    return c.json({ ok: true });
+  });
+
+  // Seed the standard STOP/HELP/START rule set for a customer in one click.
+  app.post('/admin/auto-responses/seed', async (c) => {
+    const b = await c.req.json();
+    if (!b.customer_id) return c.json({ ok: false, error: 'customer_id required' }, 400);
+    let created = 0;
+    for (const r of AR.defaultRules()) {
+      const exists = await c.env.DB.prepare(
+        'SELECT 1 FROM auto_responses WHERE customer_id = ? AND UPPER(match_keyword) = UPPER(?) LIMIT 1'
+      ).bind(b.customer_id, r.match_keyword).first();
+      if (exists) continue;
+      await c.env.DB.prepare(
+        `INSERT INTO auto_responses (customer_id, match_keyword, keyword_match, action, reply_body, enabled)
+         VALUES (?, ?, ?, ?, ?, 1)`
+      ).bind(b.customer_id, r.match_keyword, r.keyword_match, r.action, r.reply_body).run();
+      created++;
+    }
+    return c.json({ ok: true, created });
+  });
+
+  // ---- Opt-out list ----------------------------------------------------
+  app.get('/admin/opt-outs', async (c) => {
+    const cid = new URL(c.req.url).searchParams.get('customer_id');
+    const q = cid
+      ? c.env.DB.prepare('SELECT * FROM opt_outs WHERE customer_id = ? ORDER BY id DESC LIMIT 500').bind(cid)
+      : c.env.DB.prepare('SELECT * FROM opt_outs ORDER BY id DESC LIMIT 500');
+    const { results } = await q.all();
+    return c.json({ ok: true, opt_outs: results || [] });
+  });
+
+  app.delete('/admin/opt-outs/:id', async (c) => {
+    await c.env.DB.prepare('DELETE FROM opt_outs WHERE id = ?').bind(c.req.param('id')).run();
+    return c.json({ ok: true });
+  });
+
+  // ---- Outbound (MT) send log ------------------------------------------
+  app.get('/admin/outbound', async (c) => {
+    const { results } = await c.env.DB.prepare(
+      'SELECT * FROM outbound_messages ORDER BY id DESC LIMIT 200'
+    ).all();
+    return c.json({ ok: true, outbound: results || [] });
   });
 
   // ---- Logs ------------------------------------------------------------

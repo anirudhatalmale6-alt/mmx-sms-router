@@ -19,6 +19,8 @@ import { Hono } from 'hono';
 import * as R from './routing.js';
 import * as RETRY from './retry.js';
 import * as DB from './db.js';
+import * as AR from './autoresponder.js';
+import * as OUT from './outbound.js';
 import { mountAdmin } from './admin.js';
 import { dashboardHtml } from './dashboard.js';
 
@@ -161,6 +163,45 @@ async function driveDelivery(env, row) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-responder — HELP/STOP/START compliance replies (spec: carrier
+// certification). Runs on every MO, independently of MO forwarding, so a STOP
+// always gets its confirmation even when there is no forward route. STOP-family
+// keywords also add the number to the opt-out list; START removes it.
+// ---------------------------------------------------------------------------
+async function handleAutoResponse(env, customer, mo, inboundId) {
+  const rules = await DB.getAutoResponses(env.DB, customer.id);
+  if (!rules.length) return;
+  const rule = AR.matchAutoResponse(rules, mo.body);
+  if (!rule) return;
+
+  const recipient = mo.deviceAddress;
+  const replyTo = mo.senderId;
+
+  if (rule.action === 'optout') await DB.addOptOut(env.DB, customer.id, recipient, replyTo, rule.match_keyword);
+  if (rule.action === 'optin') await DB.removeOptOut(env.DB, customer.id, recipient, replyTo);
+
+  // Bookkeeping-only rule (no reply text configured).
+  if (!rule.reply_body) {
+    await DB.logOutbound(env.DB, {
+      customerId: customer.id, inboundId, keyword: rule.match_keyword, action: rule.action,
+      replyTo, recipient, body: null, status: 'skipped', error: 'no reply_body configured',
+    });
+    return;
+  }
+
+  const result = await OUT.sendMt(env, customer, {
+    reply_to: replyTo, recipient, body: rule.reply_body, reporting_key1: 'auto:' + rule.match_keyword,
+  });
+  await DB.logOutbound(env.DB, {
+    customerId: customer.id, inboundId, keyword: rule.match_keyword, action: rule.action,
+    replyTo, recipient, body: rule.reply_body,
+    status: result.ok ? 'sent' : (result.skipped ? 'skipped' : 'failed'),
+    httpStatus: result.httpStatus, mmxCode: result.code, mmxMessageId: result.messageId,
+    error: result.error || result.skipped || null,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // MO handler (shared by keyed and legacy routes).
 // ---------------------------------------------------------------------------
 async function handleMo(c, customer) {
@@ -176,6 +217,10 @@ async function handleMo(c, customer) {
   });
 
   if (!customer) return c.json({ ok: false, error: 'unknown_customer' }, 202);
+
+  // Fire the HELP/STOP/START auto-reply (in the background) before/alongside
+  // routing; it does not block or depend on the MO forward.
+  c.executionCtx.waitUntil(handleAutoResponse(c.env, customer, mo, inboundId));
 
   const rules = await DB.getMoRoutes(c.env.DB, customer.id);
   const route = R.selectMoRoute(rules, { senderId: mo.senderId, body: mo.body });
@@ -276,4 +321,4 @@ export default {
   },
 };
 
-export { attemptForward, driveDelivery, buildForwardBody };
+export { attemptForward, driveDelivery, buildForwardBody, handleAutoResponse };
